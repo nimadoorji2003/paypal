@@ -66,8 +66,8 @@ app.post("/paypal", async (req, res) => {
         payment_method: "paypal",
       },
       redirect_urls: {
-        return_url: "http://10.9.88.217:8880/success",
-        cancel_url: "http://10.9.88.217:8880/cancel",
+        return_url: "https://paypal-npml.onrender.com/success",
+        cancel_url: "https://paypal-npml.onrender.com/cancel",
       },
       transactions: [
         {
