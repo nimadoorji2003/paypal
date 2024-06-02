@@ -1,8 +1,14 @@
-const express = require("express");
-const bodyParser = require("body-parser");
-const engines = require("consolidate");
-const paypal = require("paypal-rest-sdk");
+import express from "express";
+import bodyParser from "body-parser";
+import engines from "consolidate";
+import fetch from "node-fetch";
+import paypalRestSdk from "paypal-rest-sdk";
+import session from "express-session";
+import path from "path";
+import { config } from "dotenv";
+config();
 
+const paypal = paypalRestSdk;
 const app = express();
 
 app.engine("ejs", engines.ejs);
@@ -12,96 +18,152 @@ app.set("view engine", "ejs");
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+function generateRandomString(length = 32) {
+  const characters =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += characters.charAt(Math.floor(Math.random() * characters.length));
+  }
+  return result;
+}
+
+const secretKey = generateRandomString();
+
+app.use(
+  session({
+    secret: secretKey,
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false },
+  })
+);
+
+const PAYPAL_CLIENT_ID =
+  "AV2Tz4Cowe_y1bLmaudtXEo6FWDMVnHmIIaQNpkZd-XPIgf901I5UQnfzlE7G40T1CaloBVrJG41QOfG";
+const PAYPAL_CLIENT_SECRET =
+  "EDAGmOVKWfkfrzuCG_z-besPVF8FkOfWbaQLoVgr6i03m-wbTi1NCCkd3ewHaROGMMWZMpa4TFbtd4PL";
+
 paypal.configure({
-    mode: "sandbox", //sandbox or live
-    client_id:
-        "AarUi7DfcZaVwTyuHOE2qMPGP1Gy65T8KNHicseSgSXB-gm_2upRM74fU-MKmslNaHKqNOUsxMrNv9I-",
-    client_secret:
-        "EI0ea3hVzYFwuts33i0RUVhxF48woSUSg7lwNbkImLrHpcEYpUmJPRXdf4CXn4kFacsRoZ-62cn9Xe6h"
+  mode: "sandbox", //sandbox or live
+  client_id: PAYPAL_CLIENT_ID,
+  client_secret: PAYPAL_CLIENT_SECRET,
 });
 
 app.get("/", (req, res) => {
-    res.render("index");
+  res.render("index");
 });
 
-app.get("/paypal", (req, res) => {
-    var create_payment_json = {
-        intent: "sale",
-        payer: {
-            payment_method: "paypal"
+app.post("/paypal", async (req, res) => {
+  try {
+    const { cart } = req.body;
+
+    req.session.cart = cart; // Store cart in session
+
+    const create_payment_json = {
+      intent: "sale",
+      payer: {
+        payment_method: "paypal",
+      },
+      redirect_urls: {
+        return_url: "http://10.9.89.90:8880/success",
+        cancel_url: "http://10.9.89.90:8880/cancel",
+      },
+      transactions: [
+        {
+          item_list: {
+            items: cart.map((item) => ({
+              name: item.name,
+              price: item.price.toFixed(2),
+              currency: "USD",
+              quantity: item.roomQuantity,
+            })),
+          },
+          amount: {
+            currency: "USD",
+            total: cart
+              .reduce(
+                (total, item) => total + item.price * item.roomQuantity,
+                0
+              )
+              .toFixed(2),
+          },
+          description: "This is the payment description.",
         },
-        redirect_urls: {
-            return_url: "http://localhost:3000/success",
-            cancel_url: "http://localhost:3000/cancel"
-        },
-        transactions: [
-            {
-                item_list: {
-                    items: [
-                        {
-                            name: "item",
-                            sku: "item",
-                            price: "1.00",
-                            currency: "USD",
-                            quantity: 1
-                        }
-                    ]
-                },
-                amount: {
-                    currency: "USD",
-                    total: "1.00"
-                },
-                description: "This is the payment description."
-            }
-        ]
+      ],
     };
 
-    paypal.payment.create(create_payment_json, function(error, payment) {
-        if (error) {
-            throw error;
-        } else {
-            console.log("Create Payment Response");
-            console.log(payment);
-            res.redirect(payment.links[1].href);
-        }
+    paypal.payment.create(create_payment_json, (error, payment) => {
+      if (error) {
+        console.error("Failed to create payment:", error.response);
+        res.status(400).json({
+          error: "Failed to create payment.",
+          details: error.response.details,
+        });
+      } else {
+        const approvalUrl = payment.links.find(
+          (link) => link.rel === "approval_url"
+        ).href;
+        console.log("Create Payment Response:", payment);
+        res.json({ redirect_url: approvalUrl });
+      }
     });
+  } catch (error) {
+    console.error("Failed to process PayPal payment:", error);
+    res.status(500).json({ error: "Failed to process PayPal payment." });
+  }
 });
 
-app.get("/success", (req, res) => {
-    // res.send("Success");
-    var PayerID = req.query.PayerID;
-    var paymentId = req.query.paymentId;
-    var execute_payment_json = {
-        payer_id: PayerID,
-        transactions: [
-            {
-                amount: {
-                    currency: "USD",
-                    total: "1.00"
-                }
-            }
-        ]
+app.get("/success", async (req, res) => {
+  try {
+    const { PayerID, paymentId } = req.query;
+    const cart = req.session.cart; // Retrieve cart from session
+
+    if (!cart) {
+      return res.status(400).send("Cart not found.");
+    }
+
+    const execute_payment_json = {
+      payer_id: PayerID,
+      transactions: [
+        {
+          amount: {
+            currency: "USD",
+            total: cart
+              .reduce(
+                (total, item) => total + item.price * item.roomQuantity,
+                0
+              )
+              .toFixed(2),
+          },
+        },
+      ],
     };
 
-    paypal.payment.execute(paymentId, execute_payment_json, function(
-        error,
-        payment
-    ) {
+    paypal.payment.execute(
+      paymentId,
+      execute_payment_json,
+      (error, payment) => {
         if (error) {
-            console.log(error.response);
-            throw error;
+          console.error("Failed to execute payment:", error.response);
+          res.status(500).send("Error processing payment.");
         } else {
-            console.log("Get Payment Response");
-            console.log(JSON.stringify(payment));
-            res.render("success");
+          console.log("Get Payment Response:", JSON.stringify(payment));
+          res.render("success");
         }
-    });
+      }
+    );
+  } catch (error) {
+    console.error("Error processing successful payment:", error);
+    res.status(500).send("Error processing payment.");
+  }
 });
 
-app.get("cancel", (req, res) => {
-    res.render("cancel");
+app.get("/cancel", (req, res) => {
+  res.render("cancel", { message: "Payment cancelled." });
 });
 
-app.listen(3000, () => {
-    console.log("Server is running");
+const port = 8880;
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
 });
