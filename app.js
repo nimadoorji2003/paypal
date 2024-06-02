@@ -66,8 +66,8 @@ app.post("/paypal", async (req, res) => {
         payment_method: "paypal",
       },
       redirect_urls: {
-        return_url: "http://10.9.89.90:8880/success",
-        cancel_url: "http://10.9.89.90:8880/cancel",
+        return_url: "http://10.9.88.217:8880/success",
+        cancel_url: "http://10.9.88.217:8880/cancel",
       },
       transactions: [
         {
@@ -167,3 +167,5 @@ const port = 8880;
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
+
+// 10.9.88.217
