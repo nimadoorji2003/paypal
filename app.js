@@ -81,7 +81,7 @@ app.post("/paypal", async (req, res) => {
           },
           amount: {
             currency: "USD",
-            total: item.price.toFixed(2),
+            total: cart.price.toFixed(2),
           },
           description: "This is the payment description.",
         },
@@ -124,12 +124,7 @@ app.get("/success", async (req, res) => {
         {
           amount: {
             currency: "USD",
-            total: cart
-              .reduce(
-                (total, item) => total + item.price * item.roomQuantity,
-                0
-              )
-              .toFixed(2),
+            total: cart.price.toFixed(2),
           },
         },
       ],
