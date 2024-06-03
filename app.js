@@ -66,8 +66,8 @@ app.post("/paypal", async (req, res) => {
         payment_method: "paypal",
       },
       redirect_urls: {
-        return_url: "https://paypal-npml.onrender.com/success",
-        cancel_url: "https://paypal-npml.onrender.com/cancel",
+        return_url: "http://10.9.88.217:8880/success",
+        cancel_url: "http://10.9.88.217:8880/cancel",
       },
       transactions: [
         {
@@ -81,7 +81,12 @@ app.post("/paypal", async (req, res) => {
           },
           amount: {
             currency: "USD",
-            total: cart.price.toFixed(2),
+            total: cart
+              .reduce(
+                (total, item) => total + item.price * item.roomQuantity,
+                0
+              )
+              .toFixed(2),
           },
           description: "This is the payment description.",
         },
@@ -124,7 +129,12 @@ app.get("/success", async (req, res) => {
         {
           amount: {
             currency: "USD",
-            total: cart.price.toFixed(2),
+            total: cart
+              .reduce(
+                (total, item) => total + item.price * item.roomQuantity,
+                0
+              )
+              .toFixed(2),
           },
         },
       ],
