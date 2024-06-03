@@ -81,12 +81,7 @@ app.post("/paypal", async (req, res) => {
           },
           amount: {
             currency: "USD",
-            total: cart
-              .reduce(
-                (total, item) => total + item.price * item.roomQuantity,
-                0
-              )
-              .toFixed(2),
+            total: item.price.toFixed(2),
           },
           description: "This is the payment description.",
         },
@@ -167,5 +162,3 @@ const port = 8880;
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
-
-// 10.9.88.217
